@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/utils/trpc";
 import Image from "next/image";
 
@@ -19,6 +19,7 @@ export default function TaskList({
 }) {
   const utils = trpc.useUtils();
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const {
     data,
@@ -36,6 +37,8 @@ export default function TaskList({
   const deleteTask = trpc.task.delete.useMutation({
     onSuccess: () => {
       utils.task.getPaginated.reset();
+      setSuccessMessage("Task deleted successfully");
+      setTimeout(() => setSuccessMessage(null), 3000);
     },
   });
 
@@ -84,50 +87,55 @@ export default function TaskList({
 
   return (
     <>
+      {successMessage && (
+        <p className="success">{successMessage}</p>
+      )}
       <ul>
         {tasks.map(task => (
-          <li key={task.id}>
-            <strong>{task.title}</strong>
+          <li key={task.id} className="task-card">
+            <div className="task-header">
+              <strong>{task.title}</strong>
+              <div className="icon-actions">
+                <div className="tooltip">
+                  <button
+                    onClick={() => onEdit(task)}
+                    aria-label="Edit task"
+                    className="icon-button"
+                  >
+                    <Image src="/edit.png" alt="Edit" width={20} height={20} />
+                  </button>
+                  <span className="tooltip-text">Edit task</span>
+                </div>
+
+                <div className="tooltip">
+                  <button
+                    onClick={() => handleDelete(task.id)}
+                    aria-label="Delete task"
+                    className="icon-button"
+                  >
+                    <Image src="/delete.png" alt="Delete" width={20} height={20} />
+                  </button>
+                  <span className="tooltip-text">Delete task</span>
+                </div>
+              </div>
+            </div>
 
             {task.description ? (
               <p>{task.description}</p>
             ) : (
-              <p className="muted">No description provided</p>
+              <small>No description provided</small>
             )}
 
-            <small>
-              Created at:{" "}
-              {new Date(task.createdAt).toLocaleString()}
-            </small>
-
-            {task.updatedAt && (
+            <div className="task-footer">
               <small className="muted">
-                Last updated: {new Date(task.updatedAt).toLocaleString()}
+                Created: {new Date(task.createdAt).toLocaleString()}
               </small>
-            )}
 
-            <div className="icon-actions">
-              <div className="tooltip">
-                <button
-                  onClick={() => onEdit(task)}
-                  aria-label="Edit task"
-                  className="icon-button"
-                >
-                  <Image src="/edit.png" alt="Edit" width={20} height={20} />
-                </button>
-                <span className="tooltip-text">Edit task</span>
-              </div>
-
-              <div className="tooltip">
-                <button
-                  onClick={() => handleDelete(task.id)}
-                  aria-label="Delete task"
-                  className="icon-button"
-                >
-                  <Image src="/delete.png" alt="Delete" width={20} height={20} />
-                </button>
-                <span className="tooltip-text">Delete task</span>
-              </div>
+              {task.updatedAt && (
+                <small className="muted">
+                  Last updated: {new Date(task.updatedAt).toLocaleString()}
+                </small>
+              )}
             </div>
           </li>
         ))}
