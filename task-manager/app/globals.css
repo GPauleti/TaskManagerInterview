@@ -114,6 +114,14 @@ li small {
 .muted {
   color: var(--gray);
   font-style: italic;
+  font-size: x-small;
+  align-self: right;
+}
+
+.success {
+  color: #16a34a;
+  font-weight: 500;
+  margin-top: 8px;
 }
 
 .error {
@@ -169,3 +177,32 @@ li small {
   opacity: 1;
 }
 
+.task-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+  position: relative;
+}
+
+.task-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.task-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.icon-actions {
+  display: flex;
+  gap: 8px;
+}
