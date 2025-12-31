@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { trpc } from "@/utils/trpc";
 import type { InfiniteData } from "@tanstack/react-query";
+import DOMPurify from "dompurify";
 
 type Task = {
   id: string;
@@ -27,6 +28,7 @@ export default function TaskForm({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   const utils = trpc.useUtils();
 
@@ -81,6 +83,8 @@ export default function TaskForm({
 
     onSuccess: () => {
       resetForm();
+      setSuccess("Task created successfully");
+      setTimeout(() => setSuccess(null), 3000);
     },
 
     onSettled: () => {
@@ -134,6 +138,8 @@ export default function TaskForm({
 
     onSuccess: () => {
       resetForm();
+      setSuccess("Task updated successfully");
+      setTimeout(() => setSuccess(null), 3000);
       onCancel();
     },
 
@@ -156,21 +162,28 @@ export default function TaskForm({
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!title.trim()) {
-      setError("Title is required");
+    const cleanTitle = DOMPurify.sanitize(title, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
+    const cleanDescription = DOMPurify.sanitize(description, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
+
+    setError(null);
+    setSuccess(null);
+
+    if (!cleanTitle.trim()) {
+      setError("Invalid input");
+      setTimeout(() => setError(null), 3000);
       return;
     }
 
     if (task) {
       updateTask.mutate({
         id: task.id,
-        title,
-        description,
+        title: cleanTitle,
+        description: cleanDescription,
       });
     } else {
       createTask.mutate({
-        title,
-        description,
+        title: cleanTitle,
+        description: cleanDescription,
       });
     }
   };
@@ -180,8 +193,9 @@ export default function TaskForm({
       <h2>{task ? "Edit Task" : "Create Task"}</h2>
 
       <input
-        placeholder="Title"
+        placeholder="Title - Max 70 Characters"
         value={title}
+        maxLength={70}
         onChange={e => setTitle(e.target.value)}
       />
 
@@ -208,6 +222,7 @@ export default function TaskForm({
         </button>
       )}
 
+      {success && <p className="success">{success}</p>}
       {error && <p className="error">{error}</p>}
 
       {(createTask.error || updateTask.error) && (
