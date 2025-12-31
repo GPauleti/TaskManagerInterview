@@ -43,6 +43,13 @@ The project focuses on clarity, correctness, and modern full-stack patterns rath
 
 ---
 
+### 6. Input Sanitization
+- Sanitizing input to prevent JSON scripts.
+- SQL Injection was not treated as the information lives in memory not in a DB.
+- Took the conservative option of cleaning out any and all HTML tags to prevent any sort of injection.
+
+---
+
 ### 7. Component Separation
 - UI is split into focused components:
   - `TaskForm` for creating and editing tasks
