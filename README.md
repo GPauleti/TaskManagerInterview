@@ -84,6 +84,12 @@ The project focuses on clarity, correctness, and modern full-stack patterns rath
 
 ### Steps
 
+Install the zip file
+Extract the contents
+Navigate into the task-manager folder and open it with the IDE of your choice
+
+Within the IDE terminal run:
+
 ```bash
 npm install
 npm run dev
