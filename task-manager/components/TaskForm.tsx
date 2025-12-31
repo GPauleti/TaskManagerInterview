@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/utils/trpc";
-import type { InfiniteData } from "@tanstack/react-query";
-import DOMPurify from "dompurify";
+import Image from "next/image";
 
 type Task = {
   id: string;
@@ -13,224 +12,148 @@ type Task = {
   updatedAt?: string | null;
 };
 
-type PaginatedPage = {
-  items: Task[];
-  nextCursor: string | null;
-};
-
-export default function TaskForm({
-  task,
-  onCancel,
+export default function TaskList({
+  onEdit,
 }: {
-  task?: Task;
-  onCancel: () => void;
+  onEdit: (task: Task) => void;
 }) {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-
   const utils = trpc.useUtils();
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const resetForm = () => {
-    setTitle("");
-    setDescription("");
-    setError(null);
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading,
+  } = trpc.task.getPaginated.useInfiniteQuery(
+    { limit: 5 },
+    {
+      getNextPageParam: lastPage => lastPage.nextCursor,
+    }
+  );
+
+  const deleteTask = trpc.task.delete.useMutation({
+    onSuccess: () => {
+      utils.task.getPaginated.reset();
+      setSuccessMessage("Task deleted successfully");
+      setTimeout(() => setSuccessMessage(null), 3000);
+    },
+  });
+
+  const handleDelete = (id: string) => {
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this task?"
+    );
+
+    if (!confirmed) return;
+
+    deleteTask.mutate({ id });
   };
 
-  const createTask = trpc.task.create.useMutation({
-    onMutate: async newTask => {
-      await utils.task.getPaginated.cancel();
-
-      const previousData =
-        utils.task.getPaginated.getData({ limit: 5 });
-
-      utils.task.getPaginated.setData(
-        { limit: 5 },
-        (old: InfiniteData<PaginatedPage> | undefined) => {
-          if (!old) return old;
-
-          const optimisticTask: Task = {
-            id: crypto.randomUUID(),
-            title: newTask.title,
-            description: newTask.description,
-          };
-
-          return {
-            ...old,
-            pages: [
-              {
-                ...old.pages[0],
-                items: [optimisticTask, ...old.pages[0].items],
-              },
-              ...old.pages.slice(1),
-            ],
-          };
-        }
-      );
-
-      return { previousData };
-    },
-
-    onError: (_err, _vars, ctx) => {
-      if (ctx?.previousData) {
-        utils.task.getPaginated.setData(
-          { limit: 5 },
-          ctx.previousData
-        );
-      }
-    },
-
-    onSuccess: () => {
-      resetForm();
-      setSuccess("Task created successfully");
-      setTimeout(() => setSuccess(null), 3000);
-    },
-
-    onSettled: () => {
-      utils.task.getPaginated.invalidate();
-    },
-  });
-
-  const updateTask = trpc.task.update.useMutation({
-    onMutate: async updatedTask => {
-      await utils.task.getPaginated.cancel({ limit: 5 });
-
-      const previousData =
-        utils.task.getPaginated.getData({ limit: 5 });
-
-      utils.task.getPaginated.setData(
-        { limit: 5 },
-        (old: InfiniteData<PaginatedPage> | undefined) => {
-          if (!old) return old;
-
-          const now = new Date().toISOString();
-
-          return {
-            ...old,
-            pages: old.pages.map(page => ({
-              ...page,
-              items: page.items.map(task =>
-                task.id === updatedTask.id
-                  ? {
-                    ...task,
-                    ...updatedTask,
-                    updatedAt: now,
-                  }
-                  : task
-              ),
-            })),
-          };
-        }
-      );
-
-      return { previousData };
-    },
-
-    onError: (_err, _vars, ctx) => {
-      if (ctx?.previousData) {
-        utils.task.getPaginated.setData(
-          { limit: 5 },
-          ctx.previousData
-        );
-      }
-    },
-
-    onSuccess: () => {
-      resetForm();
-      setSuccess("Task updated successfully");
-      setTimeout(() => setSuccess(null), 3000);
-      onCancel();
-    },
-
-    onSettled: () => {
-      utils.task.getPaginated.invalidate({ limit: 5 });
-    },
-  });
-
+  const tasks = Array.from(
+    new Map(
+      data?.pages
+        .flatMap(page => page.items)
+        .map(task => [task.id, task])
+    ).values()
+  );
 
   useEffect(() => {
-    if (task) {
-      setTitle(task.title);
-      setDescription(task.description ?? "");
-    } else {
-      resetForm();
-    }
-  }, [task]);
+    if (!hasNextPage || isFetchingNextPage) return;
 
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries[0].isIntersecting) {
+          fetchNextPage();
+        }
+      },
+      {
+        threshold: 0.5,
+      }
+    );
 
-  const onSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    const cleanTitle = DOMPurify.sanitize(title, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
-    const cleanDescription = DOMPurify.sanitize(description, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
-
-    setError(null);
-    setSuccess(null);
-
-    if (!cleanTitle.trim()) {
-      setError("Invalid input");
-      setTimeout(() => setError(null), 3000);
-      return;
+    if (loadMoreRef.current) {
+      observer.observe(loadMoreRef.current);
     }
 
-    if (task) {
-      updateTask.mutate({
-        id: task.id,
-        title: cleanTitle,
-        description: cleanDescription,
-      });
-    } else {
-      createTask.mutate({
-        title: cleanTitle,
-        description: cleanDescription,
-      });
-    }
-  };
+    return () => observer.disconnect();
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
+
+  if (isLoading) {
+    return <p>Loading tasks...</p>;
+  }
 
   return (
-    <form onSubmit={onSubmit}>
-      <h2>{task ? "Edit Task" : "Create Task"}</h2>
-
-      <input
-        placeholder="Title - Max 70 Characters"
-        value={title}
-        maxLength={70}
-        onChange={e => setTitle(e.target.value)}
-      />
-
-      <br />
-
-      <textarea
-        placeholder="Description (optional)"
-        value={description}
-        onChange={e => setDescription(e.target.value)}
-      />
-
-      <br />
-
-      <button
-        type="submit"
-        disabled={createTask.isLoading || updateTask.isLoading}
-      >
-        {task ? "Update Task" : "Add Task"}
-      </button>
-
-      {task && (
-        <button type="button" onClick={onCancel}>
-          Cancel
-        </button>
+    <>
+      {successMessage && (
+        <p className="success">{successMessage}</p>
       )}
+      <ul>
+        {tasks.map(task => (
+          <li key={task.id} className="task-card">
+            <div className="task-header">
+              <strong>{task.title}</strong>
+              <div className="icon-actions">
+                <div className="tooltip">
+                  <button
+                    onClick={() => onEdit(task)}
+                    aria-label="Edit task"
+                    className="icon-button"
+                  >
+                    <Image src="/edit.png" alt="Edit" width={20} height={20} />
+                  </button>
+                  <span className="tooltip-text">Edit task</span>
+                </div>
 
-      {success && <p className="success">{success}</p>}
-      {error && <p className="error">{error}</p>}
+                <div className="tooltip">
+                  <button
+                    onClick={() => handleDelete(task.id)}
+                    aria-label="Delete task"
+                    className="icon-button"
+                  >
+                    <Image src="/delete.png" alt="Delete" width={20} height={20} />
+                  </button>
+                  <span className="tooltip-text">Delete task</span>
+                </div>
+              </div>
+            </div>
 
-      {(createTask.error || updateTask.error) && (
-        <p>
-          {createTask.error?.message ||
-            updateTask.error?.message}
+            {task.description ? (
+              <p>{task.description}</p>
+            ) : (
+              <small>No description provided</small>
+            )}
+
+            <div className="task-footer">
+              <small className="muted">
+                Created: {new Date(task.createdAt).toLocaleString()}
+              </small>
+
+              {task.updatedAt && (
+                <small className="muted">
+                  Last updated: {new Date(task.updatedAt).toLocaleString()}
+                </small>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      <div ref={loadMoreRef} style={{ height: 1 }} />
+
+      {isFetchingNextPage && (
+        <p style={{ textAlign: "center", marginTop: 16 }}>
+          Loading more tasks...
         </p>
       )}
-    </form>
+
+      {!hasNextPage && tasks.length > 0 && (
+        <p style={{ textAlign: "center", marginTop: 16 }}>
+          No more tasks
+        </p>
+      )}
+    </>
   );
 }
